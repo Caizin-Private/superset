@@ -44,6 +44,7 @@ from typing import (
     Tuple,
     Type,
     TYPE_CHECKING,
+    TypedDict,
     Union,
 )
 
@@ -54,6 +55,7 @@ from dateutil import tz
 from flask import Blueprint
 from flask_appbuilder.security.manager import AUTH_DB
 from pandas._libs.parsers import STR_NA_VALUES  # pylint: disable=no-name-in-module
+from sqlalchemy.orm.query import Query
 
 from superset.advanced_data_type.plugins.internet_address import internet_address
 from superset.advanced_data_type.plugins.internet_port import internet_port
@@ -171,7 +173,7 @@ SUPERSET_WEBSERVER_PORT = 8088
 # [load balancer / proxy / envoy / kong / ...] timeout settings.
 # You should also make sure to configure your WSGI server
 # (gunicorn, nginx, apache, ...) timeout setting to be <= to this setting
-SUPERSET_WEBSERVER_TIMEOUT = int(timedelta(minutes=1).total_seconds())
+SUPERSET_WEBSERVER_TIMEOUT = int(timedelta(minutes=5).total_seconds())
 
 # this 2 settings are used by dashboard period force refresh feature
 # When user choose auto force refresh frequency
@@ -244,7 +246,7 @@ SQLALCHEMY_ENCRYPTED_FIELD_TYPE_ADAPTER = (  # pylint: disable=invalid-name
 QUERY_SEARCH_LIMIT = 1000
 
 # Flask-WTF flag for CSRF
-WTF_CSRF_ENABLED = True
+WTF_CSRF_ENABLED = False
 
 # Add endpoints that need to be exempt from CSRF protection
 WTF_CSRF_EXEMPT_LIST = [
@@ -265,11 +267,12 @@ PROFILING = False
 # user when this feature is on. This may has security implications
 # and it's more secure to turn it off in production settings.
 SHOW_STACKTRACE = True
+PUBLIC_ROLE_LIKE_GAMMA= True 
 
 # Use all X-Forwarded headers when ENABLE_PROXY_FIX is True.
 # When proxying to a different port, set "x_port" to 0 to avoid downstream issues.
-ENABLE_PROXY_FIX = False
-PROXY_FIX_CONFIG = {"x_for": 1, "x_proto": 1, "x_host": 1, "x_port": 1, "x_prefix": 1}
+ENABLE_PROXY_FIX = True
+PROXY_FIX_CONFIG = {"x_for": 1, "x_proto": 1, "x_host": 1, "x_port": 0, "x_prefix": 1}
 
 # Configuration for scheduling queries from SQL Lab.
 SCHEDULED_QUERIES: Dict[str, Any] = {}
@@ -388,7 +391,7 @@ DEFAULT_FEATURE_FLAGS: Dict[str, bool] = {
     # SUPERSET_WEBSERVER_DOMAINS for list of domains
     "ALLOW_DASHBOARD_DOMAIN_SHARDING": True,
     # Experimental feature introducing a client (browser) cache
-    "CLIENT_CACHE": False,
+    "CLIENT_CACHE": True,
     "DISABLE_DATASET_SOURCE_EDIT": False,
     # When using a recent version of Druid that supports JOINs turn this on
     "DRUID_JOINS": False,
@@ -437,7 +440,7 @@ DEFAULT_FEATURE_FLAGS: Dict[str, bool] = {
     "DASHBOARD_VIRTUALIZATION": False,
     "GLOBAL_ASYNC_QUERIES": False,
     "VERSIONED_EXPORT": True,
-    "EMBEDDED_SUPERSET": False,
+    "EMBEDDED_SUPERSET": True,
     # Enables Alerts and reports new implementation
     "ALERT_REPORTS": False,
     "DASHBOARD_RBAC": False,
@@ -476,6 +479,11 @@ DEFAULT_FEATURE_FLAGS: Dict[str, bool] = {
     "DRILL_TO_DETAIL": False,
     "DATAPANEL_CLOSED_BY_DEFAULT": False,
     "HORIZONTAL_FILTER_BAR": False,
+    # The feature is off by default, and currently only supported in Presto and Postgres,
+    # and Bigquery.
+    # It also needs to be enabled on a per-database basis, by adding the key/value pair
+    # `cost_estimate_enabled: true` to the database `extra` attribute.
+    "ESTIMATE_QUERY_COST": False,
     # Allow users to enable ssh tunneling when creating a DB.
     # Users must check whether the DB engine supports SSH Tunnels
     # otherwise enabling this flag won't have any effect on the DB.
@@ -698,8 +706,13 @@ EXPLORE_FORM_DATA_CACHE_CONFIG: CacheConfig = {
 STORE_CACHE_KEYS_IN_METADATA_DB = False
 
 # CORS Options
-ENABLE_CORS = False
-CORS_OPTIONS: Dict[Any, Any] = {}
+ENABLE_CORS = True
+CORS_OPTIONS: Dict[Any, Any] = {
+    'supports_credentials': True,
+    'allow_headers': ['*'],
+    'resources':['*'],
+    'origins': ['*']
+}
 
 # Sanitizes the HTML content used in markdowns to allow its rendering in a safe manner.
 # Disabling this option is not recommended for security reasons. If you wish to allow
@@ -740,6 +753,11 @@ ALLOWED_EXTENSIONS = {*EXCEL_EXTENSIONS, *CSV_EXTENSIONS, *COLUMNAR_EXTENSIONS}
 # method.
 # note: index option should not be overridden
 CSV_EXPORT = {"encoding": "utf-8"}
+
+# Excel Options: key/value pairs that will be passed as argument to DataFrame.to_excel
+# method.
+# note: index option should not be overridden
+EXCEL_EXPORT = {"encoding": "utf-8"}
 
 # ---------------------------------------------------
 # Time grain configurations
@@ -867,7 +885,6 @@ class CeleryConfig:  # pylint: disable=too-few-public-methods
     broker_url = "sqla+sqlite:///celerydb.sqlite"
     imports = ("superset.sql_lab",)
     result_backend = "db+sqlite:///celery_results.sqlite"
-    worker_log_level = "DEBUG"
     worker_prefetch_multiplier = 1
     task_acks_late = False
     task_annotations = {
@@ -930,16 +947,14 @@ SQLLAB_ASYNC_TIME_LIMIT_SEC = int(timedelta(hours=6).total_seconds())
 # query costs before they run. These EXPLAIN queries should have a small
 # timeout.
 SQLLAB_QUERY_COST_ESTIMATE_TIMEOUT = int(timedelta(seconds=10).total_seconds())
-# The feature is off by default, and currently only supported in Presto and Postgres.
-# It also need to be enabled on a per-database basis, by adding the key/value pair
-# `cost_estimate_enabled: true` to the database `extra` attribute.
-ESTIMATE_QUERY_COST = False
+
 # The cost returned by the databases is a relative value; in order to map the cost to
 # a tangible value you need to define a custom formatter that takes into consideration
 # your specific infrastructure. For example, you could analyze queries a posteriori by
 # running EXPLAIN on them, and compute a histogram of relative costs to present the
-# cost as a percentile:
-#
+# cost as a percentile, this step is optional as every db engine spec has its own
+# query cost formatter, but it you wanna customize it you can define it inside the config:
+
 # def postgres_query_cost_formatter(
 #     result: List[Dict[str, Any]]
 # ) -> List[Dict[str, str]]:
@@ -957,9 +972,7 @@ ESTIMATE_QUERY_COST = False
 #
 #     return out
 #
-#  Then on define the formatter on the config:
-#
-# "QUERY_COST_FORMATTERS_BY_ENGINE": {"postgresql": postgres_query_cost_formatter},
+# QUERY_COST_FORMATTERS_BY_ENGINE: {"postgresql": postgres_query_cost_formatter}
 QUERY_COST_FORMATTERS_BY_ENGINE: Dict[
     str, Callable[[List[Dict[str, Any]]], List[Dict[str, Any]]]
 ] = {}
@@ -1127,8 +1140,8 @@ BLUEPRINTS: List[Blueprint] = []
 TRACKING_URL_TRANSFORMER = lambda url: url
 
 
-# Interval between consecutive polls when using Hive Engine
-HIVE_POLL_INTERVAL = int(timedelta(seconds=5).total_seconds())
+# customize the polling time of each engine
+DB_POLL_INTERVAL_SECONDS: Dict[str, int] = {}
 
 # Interval between consecutive polls when using Presto Engine
 # See here: https://github.com/dropbox/PyHive/blob/8eb0aeab8ca300f3024655419b93dad926c1a351/pyhive/presto.py#L93  # pylint: disable=line-too-long,useless-suppression
@@ -1189,6 +1202,14 @@ def SQL_QUERY_MUTATOR(  # pylint: disable=invalid-name,unused-argument
     return sql
 
 
+# A variable that chooses whether to apply the SQL_QUERY_MUTATOR before or after splitting the input query
+# It allows for using the SQL_QUERY_MUTATOR function for more than comments
+# Usage: If you want to apply a change to every statement to a given query, set MUTATE_AFTER_SPLIT = True
+# An example use case is if data has role based access controls, and you want to apply
+# a SET ROLE statement alongside every user query. Changing this variable maintains
+# functionality for both the SQL_Lab and Charts.
+MUTATE_AFTER_SPLIT = False
+
 # This allows for a user to add header data to any outgoing emails. For example,
 # if you need to include metadata in the header or you want to change the specifications
 # of the email title, header, or sender.
@@ -1208,7 +1229,7 @@ EXCLUDE_USERS_FROM_LISTS: Optional[List[str]] = None
 # list/dropdown if you do not want these dbs to show as available.
 # The available list is generated by driver installed, and some engines have multiple
 # drivers.
-# e.g., DBS_AVAILABLE_DENYLIST: Dict[str, Set[str]] = {"databricks": ("pyhive", "pyodbc")}
+# e.g., DBS_AVAILABLE_DENYLIST: Dict[str, Set[str]] = {"databricks": {"pyhive", "pyodbc"}}
 DBS_AVAILABLE_DENYLIST: Dict[str, Set[str]] = {}
 
 # This auth provider is used by background (offline) tasks that need to access
@@ -1255,6 +1276,9 @@ ALERT_REPORTS_QUERY_EXECUTION_MAX_TRIES = 1
 # A custom prefix to use on all Alerts & Reports emails
 EMAIL_REPORTS_SUBJECT_PREFIX = "[Report] "
 
+# The text for call-to-action link in Alerts & Reports emails
+EMAIL_REPORTS_CTA = "Explore in Superset"
+
 # Slack API token for the superset reports, either string or callable
 SLACK_API_TOKEN: Optional[Union[Callable[[], str], str]] = None
 SLACK_PROXY = None
@@ -1296,6 +1320,8 @@ EMAIL_PAGE_RENDER_WAIT = int(timedelta(seconds=30).total_seconds())
 
 # Send user to a link where they can report bugs
 BUG_REPORT_URL = None
+BUG_REPORT_TEXT = "Report a bug"
+BUG_REPORT_ICON = None  # Recommended size: 16x16
 
 # Send user to a link where they can read more about Superset
 DOCUMENTATION_URL = None
@@ -1366,7 +1392,7 @@ RLS_FORM_QUERY_REL_FIELDS: Optional[Dict[str, List[List[Any]]]] = None
 #
 SESSION_COOKIE_HTTPONLY = True  # Prevent cookie from being read by frontend JS?
 SESSION_COOKIE_SECURE = False  # Prevent cookie from being transmitted over non-tls?
-SESSION_COOKIE_SAMESITE = "Lax"  # One of [None, 'None', 'Lax', 'Strict']
+SESSION_COOKIE_SAMESITE: Optional[Literal["None", "Lax", "Strict"]] = "Lax"
 
 # Cache static resources.
 SEND_FILE_MAX_AGE_DEFAULT = int(timedelta(days=365).total_seconds())
@@ -1414,6 +1440,9 @@ GLOBAL_ASYNC_QUERIES_REDIS_STREAM_LIMIT = 1000
 GLOBAL_ASYNC_QUERIES_REDIS_STREAM_LIMIT_FIREHOSE = 1000000
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_NAME = "async-token"
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_SECURE = False
+GLOBAL_ASYNC_QUERIES_JWT_COOKIE_SAMESITE: Optional[
+    Literal["None", "Lax", "Strict"]
+] = None
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_DOMAIN = None
 GLOBAL_ASYNC_QUERIES_JWT_SECRET = "test-secret-change-me"
 GLOBAL_ASYNC_QUERIES_TRANSPORT = "polling"
@@ -1423,11 +1452,11 @@ GLOBAL_ASYNC_QUERIES_POLLING_DELAY = int(
 GLOBAL_ASYNC_QUERIES_WEBSOCKET_URL = "ws://127.0.0.1:8080/"
 
 # Embedded config options
-GUEST_ROLE_NAME = "Public"
+GUEST_ROLE_NAME = "Gamma"
 GUEST_TOKEN_JWT_SECRET = "test-guest-secret-change-me"
 GUEST_TOKEN_JWT_ALGO = "HS256"
 GUEST_TOKEN_HEADER_NAME = "X-GuestToken"
-GUEST_TOKEN_JWT_EXP_SECONDS = 300  # 5 minutes
+GUEST_TOKEN_JWT_EXP_SECONDS = 3600  # 5 minutes
 # Guest token audience for the embedded superset, either string or callable
 GUEST_TOKEN_JWT_AUDIENCE: Optional[Union[Callable[[], str], str]] = None
 
@@ -1475,8 +1504,8 @@ ADVANCED_DATA_TYPES: Dict[str, AdvancedDataType] = {
     "port": internet_port,
 }
 
-# By default, the Welcome page features example charts and dashboards. This can be
-# changed to show all charts/dashboards the user has access to, or a custom view
+# By default, the Welcome page features all charts and dashboards the user has access
+# to. This can be changed to show only examples, or a custom view
 # by providing the title and a FAB filter:
 # WELCOME_PAGE_LAST_TAB = (
 #     "Xyz",
@@ -1484,7 +1513,7 @@ ADVANCED_DATA_TYPES: Dict[str, AdvancedDataType] = {
 # )
 WELCOME_PAGE_LAST_TAB: Union[
     Literal["examples", "all"], Tuple[str, List[Dict[str, Any]]]
-] = "examples"
+] = "all"
 
 # Configuration for environment tag shown on the navbar. Setting 'text' to '' will hide the tag.
 # 'color' can either be a hex color code, or a dot-indexed theme color (e.g. error.base)
@@ -1501,6 +1530,32 @@ ENVIRONMENT_TAG_CONFIG = {
         },
     },
 }
+
+
+# Extra related query filters make it possible to limit which objects are shown
+# in the UI. For examples, to only show "admin" or users starting with the letter "b" in
+# the "Owners" dropdowns, you could add the following in your config:
+# def user_filter(query: Query, *args, *kwargs):
+#     from superset import security_manager
+#
+#     user_model = security_manager.user_model
+#     filters = [
+#         user_model.username == "admin",
+#         user_model.username.ilike("b%"),
+#     ]
+#     return query.filter(or_(*filters))
+#
+#  EXTRA_RELATED_QUERY_FILTERS = {"user": user_filter}
+#
+# Similarly, to restrict the roles in the "Roles" dropdown you can provide a custom
+# filter callback for the "role" key.
+class ExtraRelatedQueryFilters(TypedDict, total=False):
+    role: Callable[[Query], Query]
+    user: Callable[[Query], Query]
+
+
+EXTRA_RELATED_QUERY_FILTERS: ExtraRelatedQueryFilters = {}
+
 
 # -------------------------------------------------------------------
 # *                WARNING:  STOP EDITING  HERE                    *

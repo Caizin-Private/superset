@@ -40,7 +40,7 @@ import {
   getSequentialSchemeRegistry,
   SequentialScheme,
   legacyValidateInteger,
-  ComparisionType,
+  ComparisonType,
   isAdhocColumn,
   isPhysicalColumn,
   ensureIsArray,
@@ -157,22 +157,22 @@ const granularity: SharedControlConfig<'SelectControl'> = {
   label: TIME_FILTER_LABELS.granularity,
   default: 'one day',
   choices: [
-    [null, 'all'],
-    ['PT5S', '5 seconds'],
-    ['PT30S', '30 seconds'],
-    ['PT1M', '1 minute'],
-    ['PT5M', '5 minutes'],
-    ['PT30M', '30 minutes'],
-    ['PT1H', '1 hour'],
-    ['PT6H', '6 hour'],
-    ['P1D', '1 day'],
-    ['P7D', '7 days'],
-    ['P1W', 'week'],
-    ['week_starting_sunday', 'week starting Sunday'],
-    ['week_ending_saturday', 'week ending Saturday'],
-    ['P1M', 'month'],
-    ['P3M', 'quarter'],
-    ['P1Y', 'year'],
+    [null, t('all')],
+    ['PT5S', t('5 seconds')],
+    ['PT30S', t('30 seconds')],
+    ['PT1M', t('1 minute')],
+    ['PT5M', t('5 minutes')],
+    ['PT30M', t('30 minutes')],
+    ['PT1H', t('1 hour')],
+    ['PT6H', t('6 hour')],
+    ['P1D', t('1 day')],
+    ['P7D', t('7 days')],
+    ['P1W', t('week')],
+    ['week_starting_sunday', t('week starting Sunday')],
+    ['week_ending_saturday', t('week ending Saturday')],
+    ['P1M', t('month')],
+    ['P3M', t('quarter')],
+    ['P1Y', t('year')],
   ],
   description: t(
     'The time granularity for the visualization. Note that you ' +
@@ -308,7 +308,7 @@ const y_axis_format: SharedControlConfig<'SelectControl', SelectDefaultOption> =
       option.label.includes(search) || option.value.includes(search),
     mapStateToProps: state => {
       const isPercentage =
-        state.controls?.comparison_type?.value === ComparisionType.Percentage;
+        state.controls?.comparison_type?.value === ComparisonType.Percentage;
       return {
         choices: isPercentage
           ? D3_FORMAT_OPTIONS.filter(option => option[0].includes('%'))

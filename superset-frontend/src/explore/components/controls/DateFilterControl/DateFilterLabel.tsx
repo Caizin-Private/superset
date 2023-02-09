@@ -171,6 +171,7 @@ export default function DateFilterLabel(props: DateFilterControlProps) {
   const [validTimeRange, setValidTimeRange] = useState<boolean>(false);
   const [evalResponse, setEvalResponse] = useState<string>(value);
   const [tooltipTitle, setTooltipTitle] = useState<ReactNode | null>(value);
+  const [hovered, setHovered] = useState<boolean>(false);
   const theme = useTheme();
   const [labelRef, labelIsTruncated] = useCSSTextTruncation<HTMLSpanElement>();
 
@@ -248,27 +249,28 @@ export default function DateFilterLabel(props: DateFilterControlProps) {
   function onSave() {
     onChange(timeRangeValue);
     setShow(false);
+    onClosePopover();
   }
 
   function onOpen() {
     setTimeRangeValue(value);
     setFrame(guessedFrame);
     setShow(true);
+    onOpenPopover();
   }
 
   function onHide() {
     setTimeRangeValue(value);
     setFrame(guessedFrame);
     setShow(false);
+    onClosePopover();
   }
 
   const toggleOverlay = () => {
     if (show) {
       onHide();
-      onClosePopover();
     } else {
       onOpen();
-      onOpenPopover();
     }
   };
 
@@ -402,9 +404,23 @@ export default function DateFilterLabel(props: DateFilterControlProps) {
     </>
   );
 
+  const StyledControl = styled.div`
+    padding-bottom: ${({ theme }) => theme.gridUnit * 1}px;
+  `;
+
   return (
     <>
-      <ControlHeader {...props} />
+      <StyledControl
+        className="Control-date-label"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <ControlHeader
+          {...props}
+          hovered={hovered}
+          description="CMS Payment Rate data is available 2003 onwards. Start year may vary for different data categories."
+        />
+      </StyledControl>
       {overlayStyle === 'Modal' ? modalContent : popoverContent}
     </>
   );
